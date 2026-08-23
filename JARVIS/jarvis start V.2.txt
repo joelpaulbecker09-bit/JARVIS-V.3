@@ -1,0 +1,2 @@
+ cd "C:\Users\joelp\Documents\Codex\2026-08-20\bugs-in-jarvis-codebase-finden-beheben\Jarvis-test--main"
+ PS C:\Users\joelp\Documents\Codex\2026-08-20\bugs-in-jarvis-codebase-finden-beheben\Jarvis-test--main> python -m src.main

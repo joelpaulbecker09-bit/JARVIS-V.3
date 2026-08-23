@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=Inter:wght@200;300;400&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- Main Background Canvas -->
+    <canvas id="bgCanvas"></canvas>
+
+    <!-- Main UI -->
+    <div id="app">
+
+        <!-- Top Bar -->
+        <div id="top-bar">
+            <span id="system-status">SYSTEM ONLINE</span>
+            <div id="top-right">
+                <div class="indicator" id="mic-indicator">
+                    <span class="dot"></span>
+                    <span>MIC</span>
+                </div>
+                <div class="indicator" id="conn-indicator">
+                    <span class="dot connected"></span>
+                    <span>CONN</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Orb -->
+        <div id="center-stage">
+            <div id="orb-wrapper">
+                <canvas id="orbCanvas"></canvas>
+                <div id="orb-label">JARVIS</div>
+                <div id="status-ring"></div>
+            </div>
+
+            <!-- Clock -->
+            <div id="clock-display">
+                <div id="clock-time">00:00</div>
+                <div id="clock-date">Monday, 01 January</div>
+            </div>
+
+            <!-- State label -->
+            <div id="state-label">IDLE</div>
+        </div>
+
+        <!-- Chat Panel (slides up) -->
+        <div id="chat-panel" class="hidden">
+            <div id="chat-header">
+                <span>CONVERSATION LOG</span>
+                <button id="close-chat">✕</button>
+            </div>
+            <div id="chat-messages"></div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div id="bottom-controls">
+            <button id="chat-toggle" class="ctrl-btn" title="Chat anzeigen">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+            </button>
+
+            <button id="ptt-btn" title="Hold to Talk (or press SPACE)">
+                <svg id="mic-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+                <div id="ptt-ripple"></div>
+            </button>
+
+            <button id="tts-toggle" class="ctrl-btn" title="Stimme ein/aus">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Inline Text Input -->
+        <div id="text-input-bar">
+            <input type="text" id="text-input" placeholder="Nachricht eingeben..." autocomplete="off" />
+            <button id="send-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13"/>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+            </button>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
