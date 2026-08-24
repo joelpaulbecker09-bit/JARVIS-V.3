@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +12,6 @@ from src.voice.piper_tts import tts
 
 app = FastAPI()
 
-# Enable CORS for local webview & browser connections
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,8 +25,8 @@ AUDIO_DIR = os.path.join(STATIC_DIR, "audio")
 ECHO_DIR = os.path.join(STATIC_DIR, "echo")
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-# Global Brain Instance
 brain = None
+
 
 def get_brain():
     global brain
@@ -35,37 +35,41 @@ def get_brain():
         brain = JarvisBrain()
     return brain
 
-# ── Health check endpoint ─────────────────────────────────────────────
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
-# ── Serve index.html at root ──────────────────────────────────────────
+
 @app.get("/")
 async def root():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
-# ── Echo Show terminal ────────────────────────────────────────────────
+
 @app.get("/echo")
 async def echo():
     return FileResponse(os.path.join(ECHO_DIR, "index.html"))
+
 
 @app.get("/echo/style.css")
 async def echo_css():
     return FileResponse(os.path.join(ECHO_DIR, "style.css"), media_type="text/css")
 
+
 @app.get("/echo/script.js")
 async def echo_js():
     return FileResponse(os.path.join(ECHO_DIR, "script.js"), media_type="application/javascript")
 
-# ── Serve static files & audio ────────────────────────────────────────
+
 @app.get("/style.css")
 async def css():
     return FileResponse(os.path.join(STATIC_DIR, "style.css"), media_type="text/css")
 
+
 @app.get("/script.js")
 async def js():
     return FileResponse(os.path.join(STATIC_DIR, "script.js"), media_type="application/javascript")
+
 
 @app.get("/audio/{filename}")
 async def get_audio(filename: str):
@@ -74,13 +78,15 @@ async def get_audio(filename: str):
         return FileResponse(file_path, media_type="audio/wav")
     return {"error": "Audio file not found"}
 
-# ── WebSocket ─────────────────────────────────────────────────────────
+
 @app.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("[UI] Client connected.")
+
     try:
         active_brain = get_brain()
+
         while True:
             raw = await websocket.receive_text()
             data = json.loads(raw)
@@ -88,42 +94,72 @@ async def websocket_endpoint(websocket: WebSocket):
             if not user_text:
                 continue
 
+            request_started = time.perf_counter()
             print(f"[UI] User: {user_text}")
 
-            # Notify: thinking
             await websocket.send_text(json.dumps({
                 "type": "status",
                 "status": "thinking",
-                "text": "JARVIS is Thinking..."
+                "text": "JARVIS is Thinking...",
             }))
 
-            # Run brain in thread pool so we never block the async loop
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
+
+            llm_started = time.perf_counter()
             try:
-                answer = await loop.run_in_executor(None, active_brain.respond, user_text)
-            except Exception as e:
-                answer = f"Entschuldigung, Sir. Ein Fehler ist aufgetreten: {e}"
+                answer = await loop.run_in_executor(
+                    None,
+                    active_brain.respond,
+                    user_text,
+                )
+            except Exception as error:
+                answer = f"Entschuldigung, Sir. Ein Fehler ist aufgetreten: {error}"
 
+            llm_seconds = time.perf_counter() - llm_started
             print(f"[UI] JARVIS: {answer}")
+            print(f"[PERF] LLM: {llm_seconds:.2f}s")
 
-            # Generate Piper TTS audio with Thorsten voice
+            await websocket.send_text(json.dumps({
+                "type": "status",
+                "status": "speaking",
+                "text": "JARVIS is Speaking...",
+            }))
+
             audio_filename = None
+            tts_seconds = 0.0
+
             if tts.is_available():
-                audio_filename = await loop.run_in_executor(None, tts.synthesize, answer)
+                tts_started = time.perf_counter()
+                audio_filename = await loop.run_in_executor(
+                    None,
+                    tts.synthesize,
+                    answer,
+                )
+                tts_seconds = time.perf_counter() - tts_started
+                print(f"[PERF] TTS: {tts_seconds:.2f}s")
+            else:
+                print("[TTS] Provider unavailable; sending text only.")
 
             audio_url = f"/audio/{audio_filename}" if audio_filename else None
 
-            # Send response with optional Piper audio_url
+            total_seconds = time.perf_counter() - request_started
+            print(f"[PERF] Total: {total_seconds:.2f}s")
+
             await websocket.send_text(json.dumps({
                 "type": "message",
                 "text": answer,
-                "audio_url": audio_url
+                "audio_url": audio_url,
+                "timing": {
+                    "llm_seconds": round(llm_seconds, 3),
+                    "tts_seconds": round(tts_seconds, 3),
+                    "total_seconds": round(total_seconds, 3),
+                },
             }))
 
     except WebSocketDisconnect:
         print("[UI] Client disconnected.")
-    except Exception as e:
-        print(f"[UI] WebSocket error: {e}")
+    except Exception as error:
+        print(f"[UI] WebSocket error: {error}")
 
 
 def start_server():
@@ -134,7 +170,6 @@ def start_server():
     print("  LAN:  http://<PC-IP>:8000")
     print("  Echo: http://<PC-IP>:8000/echo")
     print("=" * 50)
-    # Pre-initialize brain
     get_brain()
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
 
