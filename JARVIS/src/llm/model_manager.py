@@ -11,26 +11,24 @@ from src.llm.ollama_provider import OllamaProvider
 
 
 class ModelManager:
-    """
-    ModelManager entkoppelt das Gehirn von spezifischen LLM-Providern.
-    Ermöglicht dynamischen Modellwechsel je nach Aufgabe.
+    """Entkoppelt JARVIS von spezifischen LLM-Providern."""
 
-    Chat requests use conservative generation limits by default so JARVIS
-    answers stay responsive. Callers can override these values through
-    ``options`` when a task needs more output.
-    """
-
+    # Optimized for interactive voice/chat use on a local 8B model.
+    # Qwen3 thinking is disabled for normal conversation because it adds
+    # noticeable latency without helping short assistant replies.
     DEFAULT_CHAT_OPTIONS = {
         "temperature": 0.6,
         "top_p": 0.9,
-        "num_predict": 384,
+        "num_predict": 320,
         "repeat_penalty": 1.05,
+        "think": False,
     }
 
     DEFAULT_ANALYSIS_OPTIONS = {
         "temperature": 0.1,
         "top_p": 0.9,
         "num_predict": 256,
+        "think": False,
     }
 
     def __init__(self, provider: Optional[OllamaProvider] = None):
@@ -38,9 +36,6 @@ class ModelManager:
         self.default_model = config.default_model
 
     def get_model_for_task(self, task_type: TaskType) -> str:
-        """
-        Ermittelt das passende Modell für einen bestimmten Task-Typ.
-        """
         return DEFAULT_TASK_MODELS.get(task_type, self.default_model)
 
     def _build_options(
@@ -66,11 +61,9 @@ class ModelManager:
         model: Optional[str] = None,
         task_type: TaskType = TaskType.CHAT,
         json_mode: bool = False,
-        options: Optional[Dict[str, Any]] = None
+        options: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """
-        Verarbeitet eine Chat-Anfrage mit dem ausgewählten Modell.
-        """
+        """Verarbeitet eine Chat-Anfrage mit dem ausgewählten Modell."""
         selected_model = model or self.get_model_for_task(task_type)
         selected_options = self._build_options(task_type, options)
 
@@ -79,16 +72,18 @@ class ModelManager:
                 model=selected_model,
                 messages=messages,
                 json_mode=json_mode,
-                options=selected_options
+                options=selected_options,
             )
         except Exception as err:
-            # Fallback auf Default-Modell, falls ein spezifisches Modell fehlschlägt
             if selected_model != self.default_model:
-                print(f"[MODEL MANAGER] Fallback von {selected_model} auf {self.default_model}")
+                print(
+                    f"[MODEL MANAGER] Fallback von {selected_model} "
+                    f"auf {self.default_model}"
+                )
                 return self.provider.chat(
                     model=self.default_model,
                     messages=messages,
                     json_mode=json_mode,
-                    options=selected_options
+                    options=selected_options,
                 )
             raise err
