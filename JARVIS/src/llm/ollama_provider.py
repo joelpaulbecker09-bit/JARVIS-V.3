@@ -11,9 +11,7 @@ from config.config import config
 
 
 class OllamaProvider:
-    """
-    Schnittstelle für den Zugriff auf den lokalen Ollama-Dienst.
-    """
+    """Schnittstelle für den Zugriff auf den lokalen Ollama-Dienst."""
 
     def __init__(self, host: Optional[str] = None):
         self.host = host or config.ollama_host
@@ -23,27 +21,28 @@ class OllamaProvider:
         model: str,
         messages: List[Dict[str, str]],
         json_mode: bool = False,
-        options: Optional[Dict[str, Any]] = None
+        options: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """
-        Führt einen Chat-Aufruf an ein Ollama-Modell aus.
+        """Führt einen lokalen Ollama-Chat-Aufruf aus.
 
-        Args:
-            model: Name des Ollama-Modells (z.B. 'qwen3:8b')
-            messages: Liste von Nachricht-Dictionaries [{'role': 'user', 'content': '...'}]
-            json_mode: Wenn True, erzwingt Ollama JSON-Format
-            options: Zusätzliche Modell-Parameter (Temperatur, Top-P, etc.)
-
-        Returns:
-            Der Text-Inhalt der Antwort.
+        ``think`` is handled as a top-level Ollama argument because newer
+        Qwen models expose it outside the generic model options. Keeping the
+        model alive avoids repeated model-load latency between requests.
         """
-        kwargs = {
+        options = dict(options or {})
+        think = options.pop("think", None)
+
+        kwargs: Dict[str, Any] = {
             "model": model,
             "messages": messages,
+            "keep_alive": "10m",
         }
 
         if json_mode:
             kwargs["format"] = "json"
+
+        if think is not None:
+            kwargs["think"] = bool(think)
 
         if options:
             kwargs["options"] = options
