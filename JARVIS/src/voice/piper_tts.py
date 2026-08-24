@@ -7,26 +7,30 @@ from typing import Optional
 
 
 class PiperTTS:
-    """
-    Piper TTS Voice Synthesizer using a local German Piper model.
+    """Local Piper TTS with a speech-safe preprocessing layer.
 
-    The TTS layer deliberately receives a cleaned, speech-friendly version of
-    the LLM answer. Markdown, URLs, code, emojis and technical punctuation are
-    removed or converted before Piper sees the text.
+    The UI keeps the original JARVIS response. Only the text sent to Piper is
+    transformed so Markdown, URLs, code, emojis and technical symbols are not
+    spoken literally.
     """
 
     DEFAULT_PIPER_EXE = r"C:\Users\joelp\miniconda3\anaconda\Scripts\piper.exe"
     DEFAULT_MODEL_PATH = r"C:\Users\joelp\de_DE-thorsten-high.onnx"
 
-    # Common technical/English terms which otherwise sound poor when read by
-    # a German-only voice. These are intentionally conservative and can be
-    # expanded later when the JARVIS voice pipeline gets language detection.
+    # Optional English voice. If it is not installed, JARVIS automatically
+    # falls back to the German Thorsten voice with pronunciation hints.
+    DEFAULT_ENGLISH_MODEL_PATH = r"C:\Users\joelp\en_US-lessac-medium.onnx"
+
+    # Slightly faster than Piper's default while remaining natural.
+    LENGTH_SCALE = "0.92"
+
     PRONUNCIATION_REPLACEMENTS = {
-        "JARVIS": "Jarvis",
         "J.A.R.V.I.S.": "Jarvis",
+        "JARVIS": "Jarvis",
         "AI": "KI",
         "API": "A P I",
         "UI": "U I",
+        "UX": "U X",
         "URL": "U R L",
         "HTTP": "H T T P",
         "HTTPS": "H T T P S",
@@ -46,107 +50,141 @@ class PiperTTS:
         "SSD": "S S D",
         "PC": "P C",
         "Echo Show": "Echo Show",
+        "Wi-Fi": "Wai Fai",
+        "WiFi": "Wai Fai",
+        "Bluetooth": "Blutooth",
+        "TTS": "T T S",
+        "LLM": "L L M",
+        "JARVIS V.3": "Jarvis Version drei",
     }
 
-    def __init__(self, piper_exe: Optional[str] = None, model_path: Optional[str] = None):
+    def __init__(
+        self,
+        piper_exe: Optional[str] = None,
+        model_path: Optional[str] = None,
+        english_model_path: Optional[str] = None,
+    ):
         self.piper_exe = piper_exe or self.DEFAULT_PIPER_EXE
         self.model_path = model_path or self.DEFAULT_MODEL_PATH
+        self.english_model_path = english_model_path or self.DEFAULT_ENGLISH_MODEL_PATH
         self.output_dir = Path(__file__).resolve().parent.parent / "ui" / "static" / "audio"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def is_available(self) -> bool:
-        """Checks if Piper executable and model files exist."""
-        return os.path.exists(self.piper_exe) and os.path.exists(self.model_path)
+        return os.path.isfile(self.piper_exe) and os.path.isfile(self.model_path)
 
     @classmethod
     def prepare_text(cls, text: str) -> str:
-        """
-        Convert an LLM response into natural speech text.
-
-        Important: this only affects TTS. The original answer shown in the
-        JARVIS UI remains unchanged.
-        """
+        """Turn an LLM response into natural, speech-friendly German text."""
         if not text:
             return ""
 
         clean = str(text).strip()
 
-        # Remove fenced code blocks first. They should never be spoken aloud.
+        # Never read code, markdown links or URLs aloud.
         clean = re.sub(r"```[\s\S]*?```", " ", clean)
-
-        # Remove markdown links but keep their visible label.
         clean = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", clean)
-
-        # Remove bare URLs.
         clean = re.sub(r"https?://\S+|www\.\S+", " ", clean, flags=re.IGNORECASE)
 
-        # Remove markdown headings, emphasis and list markers.
+        # Markdown formatting.
         clean = re.sub(r"(^|\n)\s*#{1,6}\s*", r"\1", clean)
         clean = re.sub(r"[*_~`]+", "", clean)
         clean = re.sub(r"(^|\n)\s*[-•]\s+", r"\1", clean)
 
-        # Convert common symbols into words instead of deleting their meaning.
-        replacements = {
-            "&": " und ",
-            "+": " plus ",
+        # Common symbols expressed as words.
+        symbol_replacements = {
+            "°C": " Grad Celsius ",
+            "°F": " Grad Fahrenheit ",
             "%": " Prozent ",
             "€": " Euro ",
             "$": " Dollar ",
-            "°C": " Grad Celsius ",
-            "°": " Grad ",
+            "&": " und ",
+            "+": " plus ",
             "=": " gleich ",
             ">": " größer als ",
             "<": " kleiner als ",
-            "/": " Schrägstrich ",
-            "\\": " ",
             "@": " at ",
-            "_": " ",
+            "/": " Schrägstrich ",
             "|": " ",
+            "\\": " ",
+            "_": " ",
         }
-        for symbol, spoken in replacements.items():
+        for symbol, spoken in symbol_replacements.items():
             clean = clean.replace(symbol, spoken)
 
-        # Replace common technical words before punctuation filtering.
-        for source, target in sorted(cls.PRONUNCIATION_REPLACEMENTS.items(), key=lambda item: -len(item[0])):
-            clean = re.sub(rf"(?<!\w){re.escape(source)}(?!\w)", target, clean, flags=re.IGNORECASE)
+        # Technical terms are replaced before symbol filtering.
+        for source, target in sorted(
+            cls.PRONUNCIATION_REPLACEMENTS.items(),
+            key=lambda item: -len(item[0]),
+        ):
+            clean = re.sub(
+                rf"(?<!\w){re.escape(source)}(?!\w)",
+                target,
+                clean,
+                flags=re.IGNORECASE,
+            )
 
-        # Keep German characters. Remove control characters, emojis and other
-        # symbols that a German Piper voice should not receive.
-        clean = re.sub(r"[^\w\s.,!?;:'äöüÄÖÜß-]", " ", clean, flags=re.UNICODE)
+        # Keep German umlauts and ß. Remove emojis/control symbols.
+        clean = re.sub(
+            r"[^\w\s.,!?;:'äöüÄÖÜß-]",
+            " ",
+            clean,
+            flags=re.UNICODE,
+        )
 
-        # Normalize repeated punctuation/whitespace.
+        # Do not let punctuation become a spoken stutter.
         clean = re.sub(r"([!?.,;:])\1+", r"\1", clean)
         clean = re.sub(r"\s+", " ", clean).strip()
 
-        # Avoid absurdly long single TTS jobs. The UI still contains the full
-        # answer; this is only a safety limit for speech generation.
-        if len(clean) > 1800:
-            clean = clean[:1800].rsplit(" ", 1)[0] + "."
+        # Keep spoken responses reasonably short. The UI still shows the full
+        # answer; this only prevents giant audio files and long delays.
+        if len(clean) > 1400:
+            clean = clean[:1400].rsplit(" ", 1)[0] + "."
 
         return clean
 
+    @staticmethod
+    def _looks_english(text: str) -> bool:
+        """Small heuristic for deciding whether an answer is mainly English."""
+        words = re.findall(r"[A-Za-zÄÖÜäöüß]+", text.lower())
+        if len(words) < 5:
+            return False
+
+        english_markers = {
+            "the", "this", "that", "you", "your", "are", "is", "and", "with",
+            "from", "for", "can", "will", "what", "how", "please", "system",
+            "ready", "online", "offline", "hello", "good", "morning", "evening",
+        }
+        return sum(word in english_markers for word in words) >= 2
+
+    def _select_model(self, text: str) -> str:
+        if self._looks_english(text) and os.path.isfile(self.english_model_path):
+            return self.english_model_path
+        return self.model_path
+
     def synthesize(self, text: str) -> Optional[str]:
-        """Convert input text to speech using Piper TTS."""
+        """Convert input text to a WAV file using local Piper."""
         clean_text = self.prepare_text(text)
 
         if not clean_text:
             return None
 
         if not self.is_available():
-            print("[PIPER TTS WARNING] Piper executable or model file not found!")
+            print("[PIPER TTS WARNING] Piper executable or German model not found!")
             return None
 
         filename = f"speech_{uuid.uuid4().hex[:8]}.wav"
         output_file = self.output_dir / filename
+        selected_model = self._select_model(clean_text)
 
-        # Hide console window on Windows.
         creationflags = 0x08000000 if os.name == "nt" else 0
 
         try:
             process = subprocess.Popen(
                 [
                     self.piper_exe,
-                    "--model", self.model_path,
+                    "--model", selected_model,
+                    "--length_scale", self.LENGTH_SCALE,
                     "--output_file", str(output_file),
                 ],
                 stdin=subprocess.PIPE,
@@ -154,14 +192,15 @@ class PiperTTS:
                 stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
-                errors="ignore",
+                errors="replace",
                 creationflags=creationflags,
             )
 
-            stdout, stderr = process.communicate(input=clean_text)
+            _, stderr = process.communicate(input=clean_text)
 
             if process.returncode == 0 and output_file.exists() and output_file.stat().st_size > 0:
-                print(f"[PIPER TTS] Generated speech audio: {filename}")
+                voice = "English" if selected_model == self.english_model_path else "Deutsch"
+                print(f"[PIPER TTS] Generated {voice} speech: {filename}")
                 return filename
 
             print(
