@@ -22,6 +22,7 @@ app.add_middleware(
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 AUDIO_DIR = os.path.join(STATIC_DIR, "audio")
+ECHO_DIR = os.path.join(STATIC_DIR, "echo")
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
 # Global Brain Instance
@@ -43,6 +44,19 @@ async def health():
 @app.get("/")
 async def root():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+# ── Echo Show terminal ────────────────────────────────────────────────
+@app.get("/echo")
+async def echo():
+    return FileResponse(os.path.join(ECHO_DIR, "index.html"))
+
+@app.get("/echo/style.css")
+async def echo_css():
+    return FileResponse(os.path.join(ECHO_DIR, "style.css"), media_type="text/css")
+
+@app.get("/echo/script.js")
+async def echo_js():
+    return FileResponse(os.path.join(ECHO_DIR, "script.js"), media_type="application/javascript")
 
 # ── Serve static files & audio ────────────────────────────────────────
 @app.get("/style.css")
@@ -114,13 +128,15 @@ async def websocket_endpoint(websocket: WebSocket):
 
 def start_server():
     print("=" * 50)
-    print("  JARVIS V6 — UI Server")
+    print("  JARVIS V3 — UI Server")
     print("=" * 50)
-    print("  Open: http://127.0.0.1:8000")
+    print("  PC:   http://127.0.0.1:8000")
+    print("  LAN:  http://<PC-IP>:8000")
+    print("  Echo: http://<PC-IP>:8000/echo")
     print("=" * 50)
     # Pre-initialize brain
     get_brain()
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
 
 
 if __name__ == "__main__":
