@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#05070a">
+  <title>J.A.R.V.I.S. — Echo Terminal</title>
+  <link rel="stylesheet" href="/echo/style.css">
+</head>
+<body>
+  <main class="terminal">
+    <header>
+      <div class="brand">J.A.R.V.I.S.</div>
+      <div class="clock" id="clock">--:--</div>
+    </header>
+
+    <section class="core-card">
+      <div class="core" id="core"><span></span></div>
+      <div class="state" id="state">SYSTEM ONLINE</div>
+      <div class="substate" id="substate">Awaiting command, Sir.</div>
+    </section>
+
+    <section class="response" id="response">
+      <div class="label">JARVIS</div>
+      <div class="text" id="responseText">Good evening, Sir.</div>
+    </section>
+
+    <section class="metrics">
+      <div><span>CONNECTION</span><strong id="connection">ONLINE</strong></div>
+      <div><span>TERMINAL</span><strong>ECHO 5</strong></div>
+      <div><span>TIME</span><strong id="time2">--:--</strong></div>
+    </section>
+  </main>
+
+  <script src="/echo/script.js"></script>
+</body>
+</html>
