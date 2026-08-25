@@ -59,7 +59,7 @@ updateClock();
 setInterval(updateClock, 1000);
 
 // =====================================================================
-// BACKGROUND PARTICLES (subtle ambient dots)
+// BACKGROUND PARTICLES
 // =====================================================================
 const bgParticles = Array.from({ length: 120 }, () => ({
     x: Math.random() * window.innerWidth,
@@ -74,7 +74,6 @@ function drawBg(t) {
     const W = bgCanvas.width, H = bgCanvas.height;
     bgCtx.clearRect(0, 0, W, H);
 
-    // Dark radial gradient background
     const grad = bgCtx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, W * 0.7);
     grad.addColorStop(0, '#0e1520');
     grad.addColorStop(1, '#070a0f');
@@ -97,7 +96,7 @@ function drawBg(t) {
 }
 
 // =====================================================================
-// ORB PARTICLE SPHERE (2000 particles on a globe)
+// ORB PARTICLE SPHERE
 // =====================================================================
 const ORB_PARTICLES = 2000;
 const orbParticles = [];
@@ -110,7 +109,7 @@ for (let i = 0; i < ORB_PARTICLES; i++) {
         phi,
         dPhi: (Math.random() - 0.5) * 0.003,
         dTheta: (Math.random() - 0.5) * 0.001,
-        r: Math.random() * 0.5 + 0.5,  // 0.5 = inside, 1 = on surface
+        r: Math.random() * 0.5 + 0.5,
         size: Math.random() * 1.2 + 0.3,
         baseOpacity: Math.random() * 0.6 + 0.2,
     });
@@ -119,7 +118,6 @@ for (let i = 0; i < ORB_PARTICLES; i++) {
 let orbRotation = 0;
 let orbRotationSpeed = 0.0015;
 
-// State-based visual config
 const STATE_CONFIG = {
     idle: {
         speedMult: 1,
@@ -168,7 +166,6 @@ function drawOrb(t) {
     orbRotationSpeed = 0.0015 * cfg.speedMult;
     orbRotation += orbRotationSpeed;
 
-    // Glow aura
     const aura = orbCtx.createRadialGradient(CX, CY, RADIUS * 0.5, CX, CY, RADIUS * 1.3);
     aura.addColorStop(0, cfg.glowColor);
     aura.addColorStop(1, 'transparent');
@@ -177,19 +174,16 @@ function drawOrb(t) {
     orbCtx.arc(CX, CY, RADIUS * 1.3, 0, Math.PI * 2);
     orbCtx.fill();
 
-    // Outer ring
     orbCtx.beginPath();
     orbCtx.arc(CX, CY, RADIUS, 0, Math.PI * 2);
     orbCtx.strokeStyle = cfg.edgeColor;
     orbCtx.lineWidth = 0.8;
     orbCtx.stroke();
 
-    // Wave distortion (for speaking/listening)
     let waveAmt = 0;
     if (jarvisState === 'speaking') waveAmt = Math.sin(t * 0.006) * 8;
     if (jarvisState === 'listening') waveAmt = Math.sin(t * 0.004) * 5;
 
-    // Draw particles
     orbParticles.forEach(p => {
         p.phi += p.dPhi + orbRotationSpeed;
         p.theta += p.dTheta;
@@ -199,20 +193,17 @@ function drawOrb(t) {
         const y = Math.cos(p.theta);
         const z = Math.cos(p.phi) * sineTheta;
 
-        // Rotate around Y-axis over time
         const cosR = Math.cos(orbRotation);
         const sinR = Math.sin(orbRotation);
         const rx = x * cosR + z * sinR;
         const rz = -x * sinR + z * cosR;
 
-        // Perspective project
         const perspective = 2.2;
         const scale = perspective / (perspective - rz * 0.4);
 
         const px = CX + rx * RADIUS * scale + Math.sin(t * 0.002 + p.phi) * waveAmt;
         const py = CY + y * RADIUS * scale * 0.98;
 
-        // Depth-based opacity + size
         const depth = (rz + 1) / 2;
         const opacity = p.baseOpacity * (0.4 + depth * 0.6);
         const size = p.size * scale;
@@ -224,9 +215,6 @@ function drawOrb(t) {
     });
 }
 
-// =====================================================================
-// MAIN ANIMATION LOOP
-// =====================================================================
 function loop(t) {
     animFrame = requestAnimationFrame(loop);
     drawBg(t);
@@ -262,12 +250,27 @@ function connectWS() {
 
     ws.onmessage = (e) => {
         const data = JSON.parse(e.data);
+
         if (data.type === 'status') {
             setState(data.status);
-        } else if (data.type === 'message') {
+            return;
+        }
+
+        if (data.type === 'message') {
+            // Text appears immediately after the LLM finishes. TTS no longer
+            // blocks the visible response.
             addMessage(data.text, 'jarvis-msg');
-            setState('speaking');
+            if (ttsEnabled && data.tts_pending) {
+                setState('speaking');
+            } else {
+                setState('idle');
+            }
+            return;
+        }
+
+        if (data.type === 'audio') {
             if (ttsEnabled) {
+                setState('speaking');
                 speak(data.text, data.audio_url, () => setState('idle'));
             } else {
                 setState('idle');
@@ -286,14 +289,13 @@ function sendMessage(text) {
     if (!text.trim() || !ws || ws.readyState !== WebSocket.OPEN) return;
     addMessage(text, 'user-msg');
 
-    // Auto-open chat panel on first message
     if (chatPanel.classList.contains('hidden')) {
         chatPanel.classList.remove('hidden');
         chatToggle.classList.add('active');
     }
 
     setState('thinking');
-    ws.send(JSON.stringify({ text }));
+    ws.send(JSON.stringify({ text, tts: ttsEnabled }));
 }
 
 // =====================================================================
@@ -336,7 +338,6 @@ let currentUtterance = null;
 function speak(text, audioUrl, onEnd) {
     if (!ttsEnabled) { if (onEnd) onEnd(); return; }
 
-    // Stop any playing audio or speech
     if (currentAudio) {
         currentAudio.pause();
         currentAudio = null;
@@ -345,10 +346,11 @@ function speak(text, audioUrl, onEnd) {
         window.speechSynthesis.cancel();
     }
 
-    // 1. Prefer Piper TTS (Thorsten German male voice)
+    // Prefer Piper's German Thorsten voice.
     if (audioUrl) {
         try {
             currentAudio = new Audio(audioUrl);
+            currentAudio.preload = 'auto';
             currentAudio.onended = () => {
                 currentAudio = null;
                 if (onEnd) onEnd();
@@ -368,7 +370,6 @@ function speak(text, audioUrl, onEnd) {
         }
     }
 
-    // 2. Fallback to Web Speech API
     fallbackSpeak(text, onEnd);
 }
 
@@ -391,16 +392,18 @@ function fallbackSpeak(text, onEnd) {
     window.speechSynthesis.speak(utterance);
 }
 
-// TTS Toggle Button
 ttsToggle.addEventListener('click', () => {
     ttsEnabled = !ttsEnabled;
     ttsToggle.classList.toggle('active', ttsEnabled);
     if (!ttsEnabled) {
         window.speechSynthesis.cancel();
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+        }
         if (jarvisState === 'speaking') setState('idle');
     }
 });
-// Start as active
 ttsToggle.classList.add('active');
 
 // =====================================================================
@@ -421,8 +424,11 @@ if (SpeechRecognition) {
         pttBtn.classList.add('listening');
         micIndicator.querySelector('.dot').classList.add('recording');
         setState('listening');
-        // Stop TTS while listening
         window.speechSynthesis.cancel();
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+        }
     };
 
     recognition.onresult = (e) => {
@@ -458,7 +464,11 @@ if (SpeechRecognition) {
 function startListening() {
     if (!recognition || isRecording) return;
     try {
-        window.speechSynthesis.cancel(); // stop speaking
+        window.speechSynthesis.cancel();
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+        }
         recognition.start();
     } catch (e) {}
 }
@@ -468,15 +478,11 @@ function stopListening() {
     recognition.stop();
 }
 
-// Mouse
 pttBtn.addEventListener('mousedown', (e) => { e.preventDefault(); startListening(); });
 window.addEventListener('mouseup', stopListening);
-
-// Touch
 pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startListening(); });
 window.addEventListener('touchend', stopListening);
 
-// Keyboard: SPACE = push to talk
 window.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && document.activeElement !== textInput && !isRecording) {
         e.preventDefault();
