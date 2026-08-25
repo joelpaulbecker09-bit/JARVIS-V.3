@@ -10,9 +10,7 @@ from typing import Any, Dict
 
 
 class Config:
-    """
-    Zentrale Konfigurationsklasse für JARVIS.
-    """
+    """Zentrale Konfigurationsklasse für JARVIS."""
 
     BASE_DIR = Path(__file__).resolve().parent.parent
     CONFIG_FILE = BASE_DIR / "config" / "settings.json"
@@ -27,7 +25,7 @@ class Config:
             "reasoning_model": "gemma4:latest",
             "vision_model": "qwen3-vl:latest",
             "ollama_host": "http://localhost:11434",
-            "max_history_messages": 10,
+            "max_history_messages": 6,
             "data_dir": "data",
             "db_name": "memory.db",
         }
@@ -48,7 +46,7 @@ class Config:
 
     @property
     def max_history_messages(self) -> int:
-        return int(self._settings.get("max_history_messages", 10))
+        return int(self._settings.get("max_history_messages", 6))
 
     @property
     def data_dir(self) -> Path:
