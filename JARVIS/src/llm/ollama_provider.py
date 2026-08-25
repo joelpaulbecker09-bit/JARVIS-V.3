@@ -25,9 +25,8 @@ class OllamaProvider:
     ) -> str:
         """Führt einen lokalen Ollama-Chat-Aufruf aus.
 
-        ``think`` is handled as a top-level Ollama argument because newer
-        Qwen models expose it outside the generic model options. Keeping the
-        model alive avoids repeated model-load latency between requests.
+        Das Modell bleibt länger im Speicher, damit aufeinanderfolgende
+        Sprachbefehle nicht ständig einen neuen Modell-Ladevorgang auslösen.
         """
         options = dict(options or {})
         think = options.pop("think", None)
@@ -35,7 +34,7 @@ class OllamaProvider:
         kwargs: Dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "keep_alive": "10m",
+            "keep_alive": "30m",
         }
 
         if json_mode:
