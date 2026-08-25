@@ -22,7 +22,7 @@ class PiperVoiceTests(unittest.TestCase):
         self.assertNotIn("https", text.lower())
         self.assertNotIn("print", text.lower())
         self.assertNotIn("**", text)
-        self.assertIn("GitHub", text)
+        self.assertIn("Git Hub", text)
 
     def test_technical_pronunciation_is_explicit(self):
         text = PiperTTS.prepare_text("JARVIS nutzt AI, API, JSON und CPU.")
