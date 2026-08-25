@@ -13,13 +13,13 @@ from src.llm.ollama_provider import OllamaProvider
 class ModelManager:
     """Entkoppelt JARVIS von spezifischen LLM-Providern."""
 
-    # Optimized for interactive voice/chat use on a local 8B model.
-    # Qwen3 thinking is disabled for normal conversation because it adds
-    # noticeable latency without helping short assistant replies.
+    # Optimized for low-latency interactive use on the local Qwen 8B model.
+    # Thinking is disabled for normal conversation because it adds latency.
     DEFAULT_CHAT_OPTIONS = {
-        "temperature": 0.6,
+        "temperature": 0.55,
         "top_p": 0.9,
-        "num_predict": 320,
+        "num_ctx": 4096,
+        "num_predict": 192,
         "repeat_penalty": 1.05,
         "think": False,
     }
@@ -27,7 +27,8 @@ class ModelManager:
     DEFAULT_ANALYSIS_OPTIONS = {
         "temperature": 0.1,
         "top_p": 0.9,
-        "num_predict": 256,
+        "num_ctx": 2048,
+        "num_predict": 192,
         "think": False,
     }
 
