@@ -1,10 +1,11 @@
-import os
-import json
 import asyncio
+import json
+import os
 import time
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 import uvicorn
 
 from src.core.brain import JarvisBrain
@@ -91,6 +92,7 @@ async def websocket_endpoint(websocket: WebSocket):
             raw = await websocket.receive_text()
             data = json.loads(raw)
             user_text = data.get("text", "").strip()
+            tts_requested = bool(data.get("tts", True))
             if not user_text:
                 continue
 
@@ -104,8 +106,8 @@ async def websocket_endpoint(websocket: WebSocket):
             }))
 
             loop = asyncio.get_running_loop()
-
             llm_started = time.perf_counter()
+
             try:
                 answer = await loop.run_in_executor(
                     None,
@@ -118,6 +120,33 @@ async def websocket_endpoint(websocket: WebSocket):
             llm_seconds = time.perf_counter() - llm_started
             print(f"[UI] JARVIS: {answer}")
             print(f"[PERF] LLM: {llm_seconds:.2f}s")
+
+            # Send the text immediately. The browser no longer waits for TTS
+            # generation before showing the answer.
+            await websocket.send_text(json.dumps({
+                "type": "message",
+                "text": answer,
+                "audio_url": None,
+                "tts_pending": tts_requested,
+                "timing": {
+                    "llm_seconds": round(llm_seconds, 3),
+                    "tts_seconds": 0.0,
+                    "total_seconds": round(time.perf_counter() - request_started, 3),
+                },
+            }))
+
+            if not tts_requested:
+                await websocket.send_text(json.dumps({
+                    "type": "audio",
+                    "text": answer,
+                    "audio_url": None,
+                    "timing": {
+                        "llm_seconds": round(llm_seconds, 3),
+                        "tts_seconds": 0.0,
+                        "total_seconds": round(time.perf_counter() - request_started, 3),
+                    },
+                }))
+                continue
 
             await websocket.send_text(json.dumps({
                 "type": "status",
@@ -138,15 +167,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 tts_seconds = time.perf_counter() - tts_started
                 print(f"[PERF] TTS: {tts_seconds:.2f}s")
             else:
-                print("[TTS] Provider unavailable; sending text only.")
+                print("[TTS] Provider unavailable; browser fallback will be used.")
 
             audio_url = f"/audio/{audio_filename}" if audio_filename else None
-
             total_seconds = time.perf_counter() - request_started
             print(f"[PERF] Total: {total_seconds:.2f}s")
 
             await websocket.send_text(json.dumps({
-                "type": "message",
+                "type": "audio",
                 "text": answer,
                 "audio_url": audio_url,
                 "timing": {
